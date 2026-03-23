@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workout Tracker</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <h1>Workout Tracker</h1>
+      </header>
+
+      <main class="container">
+        <section id="auth-section" class="card">
+          <h2>Login / Sign Up</h2>
+          <input type="email" id="email" placeholder="Email" />
+          <input type="password" id="password" placeholder="Password" />
+          <div class="button-row">
+            <button id="signup-btn">Sign Up</button>
+            <button id="signin-btn" class="primary">Sign In</button>
+          </div>
+          <p id="auth-message" class="message"></p>
+        </section>
+
+        <section id="app-section" class="hidden">
+          <div class="card">
+            <div class="top-row">
+              <div>
+                <h2>Dashboard</h2>
+                <p id="user-email" class="muted"></p>
+              </div>
+              <button id="signout-btn">Sign Out</button>
+            </div>
+
+            <div class="quick-actions">
+              <button id="show-dashboard-btn" class="primary">Dashboard</button>
+              <button id="show-create-routine-btn">Create Routine</button>
+              <button id="show-routines-btn">My Routines</button>
+            </div>
+          </div>
+
+          <section id="dashboard-view">
+            <div class="card">
+              <h2>Today</h2>
+              <p id="today-label" class="muted"></p>
+              <div id="today-routine-suggestion" class="suggestion-box">
+                No routine assigned for today yet.
+              </div>
+            </div>
+
+            <div class="card stats-grid">
+              <div class="stat-box">
+                <div class="stat-number" id="routine-count">0</div>
+                <div class="stat-label">Routines</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-number" id="exercise-count">0</div>
+                <div class="stat-label">Exercises</div>
+              </div>
+            </div>
+          </section>
+
+          <section id="create-routine-view" class="hidden">
+            <div class="card">
+              <h2>Create Routine</h2>
+
+              <input
+                type="text"
+                id="routine-name"
+                placeholder="Routine name (Push Day, Pull Day)"
+              />
+
+              <div>
+                <label class="section-label">Assign Days</label>
+                <div class="day-selector" id="day-selector">
+                  <button type="button" class="day-btn" data-day="Monday">
+                    Mon
+                  </button>
+                  <button type="button" class="day-btn" data-day="Tuesday">
+                    Tue
+                  </button>
+                  <button type="button" class="day-btn" data-day="Wednesday">
+                    Wed
+                  </button>
+                  <button type="button" class="day-btn" data-day="Thursday">
+                    Thu
+                  </button>
+                  <button type="button" class="day-btn" data-day="Friday">
+                    Fri
+                  </button>
+                  <button type="button" class="day-btn" data-day="Saturday">
+                    Sat
+                  </button>
+                  <button type="button" class="day-btn" data-day="Sunday">
+                    Sun
+                  </button>
+                </div>
+              </div>
+
+              <div class="section-divider"></div>
+
+              <div class="top-row">
+                <h3>Exercises</h3>
+                <button id="add-exercise-row-btn" type="button">
+                  + Add Exercise
+                </button>
+              </div>
+
+              <div id="routine-exercises-container"></div>
+
+              <div class="button-row save-row">
+                <button id="save-routine-btn" class="primary">
+                  Save Routine
+                </button>
+              </div>
+
+              <p id="routine-message" class="message"></p>
+            </div>
+          </section>
+
+          <section id="routines-view" class="hidden">
+            <div class="card">
+              <div class="top-row">
+                <h2>My Routines</h2>
+                <button id="refresh-routines-btn" type="button">Refresh</button>
+              </div>
+              <div id="routines-list"></div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
