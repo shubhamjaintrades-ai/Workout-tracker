@@ -69,6 +69,8 @@ let exerciseRowCounter = 0;
 let currentUser = null;
 let allRoutinesCache = [];
 let activeDraft = null;
+let editingRoutineId = null;
+let lastPerformanceMap = {};
 
 document.addEventListener("DOMContentLoaded", () => {
   authSection = document.getElementById("auth-section");
@@ -141,6 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   addExerciseRowBtn.addEventListener("click", addExerciseRow);
   saveRoutineBtn.addEventListener("click", saveRoutine);
+  document.getElementById("cancel-edit-btn").addEventListener("click", cancelEditRoutine);
 
   loadWorkoutBtn.addEventListener("click", handleLoadWorkout);
   finishWorkoutBtn.addEventListener("click", finishWorkout);
@@ -309,13 +312,77 @@ function toggleDay(dayName, button) {
 }
 
 function resetRoutineForm() {
+  editingRoutineId = null;
   routineNameInput.value = "";
   routineMessage.textContent = "";
   selectedDays = [];
   exerciseRowCounter = 0;
   routineExercisesContainer.innerHTML = "";
   dayButtons.forEach((btn) => btn.classList.remove("active"));
+  saveRoutineBtn.textContent = "Save Routine";
+  document.getElementById("cancel-edit-btn").classList.add("hidden");
   addExerciseRow();
+}
+
+function editRoutine(routineId) {
+  const routine = allRoutinesCache.find((r) => r.id === routineId);
+  if (!routine) return;
+
+  editingRoutineId = routineId;
+  routineNameInput.value = routine.name;
+  routineMessage.textContent = "";
+  selectedDays = (routine.routine_days || []).map((d) => d.day_name);
+  exerciseRowCounter = 0;
+  routineExercisesContainer.innerHTML = "";
+
+  dayButtons.forEach((btn) => {
+    if (selectedDays.includes(btn.dataset.day)) btn.classList.add("active");
+    else btn.classList.remove("active");
+  });
+
+  const exercises = [...(routine.routine_exercises || [])].sort(
+    (a, b) => (a.sort_order || 0) - (b.sort_order || 0)
+  );
+
+  for (const ex of exercises) {
+    addExerciseRow();
+    const row = routineExercisesContainer.lastElementChild;
+    row.querySelector(".exercise-name-input").value = ex.exercise_name;
+    row.querySelector(".exercise-category-select").value = ex.category;
+    row.querySelector(".exercise-type-select").value = ex.exercise_type || "normal";
+    row.querySelector(".exercise-group-number-input").value = ex.group_number || "";
+    row.querySelector(".exercise-sort-order-input").value = ex.sort_order || "";
+
+    const subfields = row.querySelector(".exercise-subfields");
+    renderExerciseSubfields(ex.category, subfields);
+
+    const setsInput = subfields.querySelector(".target-sets-input");
+    if (setsInput) setsInput.value = ex.target_sets || "";
+
+    if (ex.category === "strength") {
+      const repsInput = subfields.querySelector(".target-reps-input");
+      if (repsInput) repsInput.value = ex.target_reps || "";
+    } else if (ex.category === "cardio") {
+      const distInput = subfields.querySelector(".target-distance-input");
+      const timeInput = subfields.querySelector(".target-time-minutes-input");
+      if (distInput) distInput.value = ex.target_distance || "";
+      if (timeInput) timeInput.value = ex.target_time_seconds ? Math.round(ex.target_time_seconds / 60) : "";
+    } else {
+      const distInput = subfields.querySelector(".target-distance-input");
+      const weightInput = subfields.querySelector(".target-weight-input");
+      if (distInput) distInput.value = ex.target_distance || "";
+      if (weightInput) weightInput.value = ex.target_weight || "";
+    }
+  }
+
+  saveRoutineBtn.textContent = "Update Routine";
+  document.getElementById("cancel-edit-btn").classList.remove("hidden");
+  showView("create-routine");
+}
+
+function cancelEditRoutine() {
+  resetRoutineForm();
+  showView("routines");
 }
 
 function addExerciseRow() {
@@ -500,21 +567,37 @@ async function saveRoutine() {
     exercisesPayload.push(payload);
   }
 
-  const { data: routineData, error: routineError } = await supabase
-    .from("routines")
-    .insert({
-      user_id: currentUser.id,
-      name: routineName,
-    })
-    .select("id")
-    .single();
+  let routineId;
 
-  if (routineError) {
-    routineMessage.textContent = routineError.message;
-    return;
+  if (editingRoutineId) {
+    // Delete old related data, then update
+    await supabase.from("routine_exercises").delete().eq("routine_id", editingRoutineId);
+    await supabase.from("routine_days").delete().eq("routine_id", editingRoutineId);
+    const { error: updateError } = await supabase
+      .from("routines")
+      .update({ name: routineName })
+      .eq("id", editingRoutineId);
+    if (updateError) {
+      routineMessage.textContent = updateError.message;
+      return;
+    }
+    routineId = editingRoutineId;
+  } else {
+    const { data: routineData, error: routineError } = await supabase
+      .from("routines")
+      .insert({
+        user_id: currentUser.id,
+        name: routineName,
+      })
+      .select("id")
+      .single();
+
+    if (routineError) {
+      routineMessage.textContent = routineError.message;
+      return;
+    }
+    routineId = routineData.id;
   }
-
-  const routineId = routineData.id;
 
   const { error: daysError } = await supabase
     .from("routine_days")
@@ -534,7 +617,7 @@ async function saveRoutine() {
     return;
   }
 
-  routineMessage.textContent = "Routine saved successfully.";
+  routineMessage.textContent = editingRoutineId ? "Routine updated successfully." : "Routine saved successfully.";
   resetRoutineForm();
   await refreshAppData();
   showView("routines");
@@ -716,9 +799,10 @@ async function loadRoutines(userId) {
         <div class="routine-card">
           <div class="top-row">
             <h3>${escapeHtml(routine.name)}</h3>
-            <button class="danger delete-routine-btn" data-routine-id="${routine.id}">
-              Delete
-            </button>
+            <div class="button-row">
+              <button class="edit-routine-btn" data-routine-id="${routine.id}">Edit</button>
+              <button class="danger delete-routine-btn" data-routine-id="${routine.id}">Delete</button>
+            </div>
           </div>
           <div class="day-chip-wrap">${days}</div>
           <div>${exercises}</div>
@@ -730,6 +814,12 @@ async function loadRoutines(userId) {
   Array.from(routinesList.querySelectorAll(".delete-routine-btn")).forEach((btn) => {
     btn.addEventListener("click", async () => {
       await deleteRoutine(Number(btn.dataset.routineId));
+    });
+  });
+
+  Array.from(routinesList.querySelectorAll(".edit-routine-btn")).forEach((btn) => {
+    btn.addEventListener("click", () => {
+      editRoutine(Number(btn.dataset.routineId));
     });
   });
 }
@@ -770,6 +860,8 @@ async function handleLoadWorkout() {
   const exercises = [...(routine.routine_exercises || [])].sort(
     (a, b) => (a.sort_order || 0) - (b.sort_order || 0)
   );
+
+  await loadLastPerformance(routine.id);
 
   activeDraft = {
     userId: currentUser.id,
@@ -850,6 +942,7 @@ function renderActiveWorkout() {
                 }
               </div>
               <div class="workout-target">${escapeHtml(buildDraftTargetText(exercise))}</div>
+              ${renderLastPerformance(exercise.exerciseName)}
             </div>
             <button
               type="button"
@@ -1168,6 +1261,45 @@ async function upsertPersonalRecord(userId, exerciseName, bestWeight) {
   );
 }
 
+async function loadLastPerformance(routineId) {
+  lastPerformanceMap = {};
+  const { data: sessions } = await supabase
+    .from("workout_sessions")
+    .select(`
+      id,
+      workout_date,
+      workout_session_exercises (
+        exercise_name,
+        category,
+        workout_sets (
+          set_number, reps, weight, distance, time_seconds
+        )
+      )
+    `)
+    .eq("routine_id", routineId)
+    .order("id", { ascending: false })
+    .limit(1);
+
+  if (!sessions?.length) return;
+
+  for (const ex of sessions[0].workout_session_exercises || []) {
+    const sets = [...(ex.workout_sets || [])].sort((a, b) => a.set_number - b.set_number);
+    lastPerformanceMap[ex.exercise_name] = { category: ex.category, sets };
+  }
+}
+
+function renderLastPerformance(exerciseName) {
+  const prev = lastPerformanceMap[exerciseName];
+  if (!prev || !prev.sets.length) return "";
+
+  const lines = prev.sets.map((s) => {
+    const text = buildHistorySetText(prev.category, s);
+    return `<div class="exercise-meta">Set ${s.set_number}: ${escapeHtml(text)}</div>`;
+  }).join("");
+
+  return `<div class="last-performance"><div class="last-perf-label">Last time:</div>${lines}</div>`;
+}
+
 async function loadHistory(userId) {
   if (!userId) return;
 
@@ -1243,7 +1375,10 @@ async function loadHistory(userId) {
 
       return `
         <div class="history-card">
-          <h3>${escapeHtml(routineName)}</h3>
+          <div class="top-row">
+            <h3>${escapeHtml(routineName)}</h3>
+            <button class="danger delete-history-btn" data-session-id="${session.id}">Delete</button>
+          </div>
           <div class="exercise-meta">${escapeHtml(session.workout_date)} • ${escapeHtml(session.workout_day || "")}</div>
           ${session.notes ? `<div class="exercise-meta">Notes: ${escapeHtml(session.notes)}</div>` : ""}
           <div style="margin-top:10px;">${exerciseHtml}</div>
@@ -1251,6 +1386,16 @@ async function loadHistory(userId) {
       `;
     })
     .join("");
+
+  Array.from(historyList.querySelectorAll(".delete-history-btn")).forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this workout from history?")) return;
+      const { error } = await supabase.from("workout_sessions").delete().eq("id", Number(btn.dataset.sessionId));
+      if (error) { alert(error.message); return; }
+      await loadHistory(userId);
+      await loadDashboardPRCount(userId);
+    });
+  });
 }
 
 function buildHistorySetText(category, set) {
