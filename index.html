@@ -38,6 +38,8 @@
               <button id="show-dashboard-btn" class="primary">Dashboard</button>
               <button id="show-create-routine-btn">Create Routine</button>
               <button id="show-routines-btn">My Routines</button>
+              <button id="show-start-workout-btn">Start Workout</button>
+              <button id="show-history-btn">History</button>
             </div>
           </div>
 
@@ -59,6 +61,14 @@
                 <div class="stat-number" id="exercise-count">0</div>
                 <div class="stat-label">Exercises</div>
               </div>
+              <div class="stat-box">
+                <div class="stat-number" id="history-count">0</div>
+                <div class="stat-label">Workouts</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-number" id="pr-count">0</div>
+                <div class="stat-label">PRs</div>
+              </div>
             </div>
           </section>
 
@@ -74,28 +84,14 @@
 
               <div>
                 <label class="section-label">Assign Days</label>
-                <div class="day-selector" id="day-selector">
-                  <button type="button" class="day-btn" data-day="Monday">
-                    Mon
-                  </button>
-                  <button type="button" class="day-btn" data-day="Tuesday">
-                    Tue
-                  </button>
-                  <button type="button" class="day-btn" data-day="Wednesday">
-                    Wed
-                  </button>
-                  <button type="button" class="day-btn" data-day="Thursday">
-                    Thu
-                  </button>
-                  <button type="button" class="day-btn" data-day="Friday">
-                    Fri
-                  </button>
-                  <button type="button" class="day-btn" data-day="Saturday">
-                    Sat
-                  </button>
-                  <button type="button" class="day-btn" data-day="Sunday">
-                    Sun
-                  </button>
+                <div class="day-selector">
+                  <button type="button" class="day-btn" data-day="Monday">Mon</button>
+                  <button type="button" class="day-btn" data-day="Tuesday">Tue</button>
+                  <button type="button" class="day-btn" data-day="Wednesday">Wed</button>
+                  <button type="button" class="day-btn" data-day="Thursday">Thu</button>
+                  <button type="button" class="day-btn" data-day="Friday">Fri</button>
+                  <button type="button" class="day-btn" data-day="Saturday">Sat</button>
+                  <button type="button" class="day-btn" data-day="Sunday">Sun</button>
                 </div>
               </div>
 
@@ -103,17 +99,13 @@
 
               <div class="top-row">
                 <h3>Exercises</h3>
-                <button id="add-exercise-row-btn" type="button">
-                  + Add Exercise
-                </button>
+                <button id="add-exercise-row-btn" type="button">+ Add Exercise</button>
               </div>
 
               <div id="routine-exercises-container"></div>
 
               <div class="button-row save-row">
-                <button id="save-routine-btn" class="primary">
-                  Save Routine
-                </button>
+                <button id="save-routine-btn" class="primary">Save Routine</button>
               </div>
 
               <p id="routine-message" class="message"></p>
@@ -127,6 +119,62 @@
                 <button id="refresh-routines-btn" type="button">Refresh</button>
               </div>
               <div id="routines-list"></div>
+            </div>
+          </section>
+
+          <section id="start-workout-view" class="hidden">
+            <div class="card">
+              <h2>Start Workout</h2>
+              <p class="muted">Suggested based on today. You can override it.</p>
+
+              <label class="section-label">Choose Routine</label>
+              <select id="workout-routine-select">
+                <option value="">Select a routine</option>
+              </select>
+
+              <div class="button-row">
+                <button id="load-workout-btn" class="primary">Load Routine</button>
+              </div>
+
+              <p id="workout-start-message" class="message"></p>
+            </div>
+          </section>
+
+          <section id="active-workout-view" class="hidden">
+            <div class="card">
+              <div class="top-row">
+                <div>
+                  <h2 id="active-workout-title">Workout</h2>
+                  <p id="active-workout-subtitle" class="muted"></p>
+                </div>
+                <button id="discard-draft-btn" class="danger">Discard Draft</button>
+              </div>
+            </div>
+
+            <div id="active-workout-container"></div>
+
+            <div class="card">
+              <textarea
+                id="workout-notes"
+                placeholder="Workout notes (optional)"
+                class="notes-box"
+              ></textarea>
+
+              <div class="button-row">
+                <button id="finish-workout-btn" class="primary">Finish Workout</button>
+              </div>
+
+              <p id="workout-save-message" class="message"></p>
+            </div>
+          </section>
+
+          <section id="history-view" class="hidden">
+            <div class="card">
+              <div class="top-row">
+                <h2>Workout History</h2>
+                <button id="refresh-history-btn" type="button">Refresh</button>
+              </div>
+              <div id="history-list"></div>
             </div>
           </section>
         </section>
