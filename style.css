@@ -313,3 +313,18 @@ button.danger {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.last-performance {
+  background: #f0fdf4;
+  border: 1px dashed #86efac;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.last-perf-label {
+  font-weight: bold;
+  font-size: 13px;
+  color: #166534;
+  margin-bottom: 4px;
+}
