@@ -214,6 +214,56 @@ button.danger {
   color: #5b21b6;
 }
 
+.superset-group-container {
+  border-left: 4px solid #7c3aed;
+  background: #faf5ff;
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.superset-group-container .card.workout-exercise-card {
+  margin-bottom: 10px;
+  border: 1px solid #ddd6fe;
+  box-shadow: none;
+}
+
+.superset-group-container .card.workout-exercise-card:last-child {
+  margin-bottom: 0;
+}
+
+.superset-group-header {
+  font-size: 13px;
+  font-weight: bold;
+  color: #7c3aed;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.superset-group-header::before {
+  content: "\1F517";
+  font-size: 14px;
+}
+
+.superset-group-compact {
+  padding: 10px;
+}
+
+.superset-group-compact .exercise-item {
+  border-top-color: #ddd6fe;
+}
+
+.superset-group-hint {
+  font-size: 12px;
+  color: #7c3aed;
+  background: #f5f3ff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+}
+
 .exercise-item {
   border-top: 1px solid #edf0f5;
   padding: 10px 0;
