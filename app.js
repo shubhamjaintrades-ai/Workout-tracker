@@ -353,6 +353,12 @@ function editRoutine(routineId) {
     row.querySelector(".exercise-group-number-input").value = ex.group_number || "";
     row.querySelector(".exercise-sort-order-input").value = ex.sort_order || "";
 
+    // Re-trigger visibility after setting type
+    const typeSelect = row.querySelector(".exercise-type-select");
+    const groupInput = row.querySelector(".exercise-group-number-input");
+    const groupHint = row.querySelector(".superset-group-hint");
+    updateGroupFieldVisibility(typeSelect, groupInput, groupHint);
+
     const subfields = row.querySelector(".exercise-subfields");
     renderExerciseSubfields(ex.category, subfields);
 
@@ -375,6 +381,7 @@ function editRoutine(routineId) {
     }
   }
 
+  updateAllSupersetHints();
   saveRoutineBtn.textContent = "Update Routine";
   document.getElementById("cancel-edit-btn").classList.remove("hidden");
   showView("create-routine");
@@ -410,9 +417,10 @@ function addExerciseRow() {
     </div>
 
     <div class="exercise-type-row">
-      <input type="number" class="exercise-group-number-input" placeholder="Superset Group No. (optional)" />
+      <input type="number" class="exercise-group-number-input" placeholder="Superset Group No." />
       <input type="number" class="exercise-sort-order-input" placeholder="Sort Order" value="${exerciseRowCounter}" />
     </div>
+    <div class="superset-group-hint hidden"></div>
 
     <div class="exercise-subfields"></div>
 
@@ -425,8 +433,25 @@ function addExerciseRow() {
 
   const categorySelect = wrapper.querySelector(".exercise-category-select");
   const subfieldsContainer = wrapper.querySelector(".exercise-subfields");
+  const typeSelect = wrapper.querySelector(".exercise-type-select");
+  const groupInput = wrapper.querySelector(".exercise-group-number-input");
+  const groupHint = wrapper.querySelector(".superset-group-hint");
 
   renderExerciseSubfields(categorySelect.value, subfieldsContainer);
+  updateGroupFieldVisibility(typeSelect, groupInput, groupHint);
+
+  typeSelect.addEventListener("change", () => {
+    updateGroupFieldVisibility(typeSelect, groupInput, groupHint);
+    if (typeSelect.value === "superset" && !groupInput.value) {
+      groupInput.value = getNextSupersetGroupNumber();
+    }
+    if (typeSelect.value !== "superset") {
+      groupInput.value = "";
+    }
+    updateAllSupersetHints();
+  });
+
+  groupInput.addEventListener("input", () => updateAllSupersetHints());
 
   categorySelect.addEventListener("change", () => {
     renderExerciseSubfields(categorySelect.value, subfieldsContainer);
@@ -434,7 +459,48 @@ function addExerciseRow() {
 
   wrapper.querySelector(".remove-exercise-btn").addEventListener("click", () => {
     wrapper.remove();
+    updateAllSupersetHints();
   });
+}
+
+function updateGroupFieldVisibility(typeSelect, groupInput, groupHint) {
+  const isSuperset = typeSelect.value === "superset";
+  groupInput.parentElement.classList.toggle("hidden", !isSuperset);
+  if (!isSuperset) groupHint.classList.add("hidden");
+}
+
+function getNextSupersetGroupNumber() {
+  const existing = Array.from(routineExercisesContainer.querySelectorAll(".exercise-group-number-input"))
+    .map((input) => Number(input.value))
+    .filter((n) => n > 0);
+  return existing.length ? Math.max(...existing) : 1;
+}
+
+function updateAllSupersetHints() {
+  const groupMap = {};
+  const rows = Array.from(routineExercisesContainer.querySelectorAll(".exercise-row"));
+
+  for (const row of rows) {
+    const type = row.querySelector(".exercise-type-select").value;
+    const group = Number(row.querySelector(".exercise-group-number-input").value);
+    const name = row.querySelector(".exercise-name-input").value.trim() || "Unnamed";
+    if (type === "superset" && group > 0) {
+      if (!groupMap[group]) groupMap[group] = [];
+      groupMap[group].push(name);
+    }
+  }
+
+  for (const row of rows) {
+    const type = row.querySelector(".exercise-type-select").value;
+    const group = Number(row.querySelector(".exercise-group-number-input").value);
+    const hint = row.querySelector(".superset-group-hint");
+    if (type === "superset" && group > 0 && groupMap[group]?.length > 1) {
+      hint.textContent = `Linked with: ${groupMap[group].filter((n) => n !== (row.querySelector(".exercise-name-input").value.trim() || "Unnamed")).join(", ")}`;
+      hint.classList.remove("hidden");
+    } else {
+      hint.classList.add("hidden");
+    }
+  }
 }
 
 function renderExerciseSubfields(category, container) {
@@ -780,10 +846,25 @@ async function loadRoutines(userId) {
         .map((d) => `<span class="day-chip">${escapeHtml(d.day_name)}</span>`)
         .join("");
 
-      const exercises = [...(routine.routine_exercises || [])]
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-        .map(
-          (exercise) => `
+      const sortedExercises = [...(routine.routine_exercises || [])]
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+      const exerciseGroups = groupRoutineExercisesForRender(sortedExercises);
+      const exercises = exerciseGroups.map((group) => {
+        if (group.type === "superset") {
+          const inner = group.exercises.map((exercise) => `
+            <div class="exercise-item">
+              <div class="exercise-name">${escapeHtml(exercise.exercise_name)}</div>
+              <div class="exercise-meta">${escapeHtml(buildTargetText(exercise))}</div>
+            </div>
+          `).join("");
+          return `<div class="superset-group-container superset-group-compact">
+            <div class="superset-group-header">Superset — Group ${group.groupNumber}</div>
+            ${inner}
+          </div>`;
+        }
+        const exercise = group.exercises[0];
+        return `
           <div class="exercise-item">
             <div class="exercise-name">${escapeHtml(exercise.exercise_name)}</div>
             <div class="exercise-meta">
@@ -791,9 +872,8 @@ async function loadRoutines(userId) {
               ${escapeHtml(buildExerciseTypeText(exercise))}
             </div>
           </div>
-        `
-        )
-        .join("");
+        `;
+      }).join("");
 
       return `
         <div class="routine-card">
@@ -915,51 +995,74 @@ function renderActiveWorkout() {
   activeWorkoutSubtitle.textContent = `${activeDraft.dayName} workout`;
   workoutNotes.value = activeDraft.notes || "";
 
-  activeWorkoutContainer.innerHTML = activeDraft.exercises
-    .map((exercise, exerciseIndex) => {
-      const setRows = exercise.sets
-        .map((set, setIndex) => renderSetRow(exercise, exerciseIndex, set, setIndex))
-        .join("");
+  const groups = groupExercisesForRender(activeDraft.exercises);
 
-      return `
-        <div class="card workout-exercise-card">
-          <div class="top-row">
-            <div>
-              <h3>${escapeHtml(exercise.exerciseName)}</h3>
-              <div class="inline-chip-row">
-                <span class="type-chip">${escapeHtml(exercise.category)}</span>
-                ${
-                  exercise.exerciseType === "superset"
-                    ? `<span class="superset-chip">Superset${
-                        exercise.groupNumber ? ` Group ${exercise.groupNumber}` : ""
-                      }</span>`
-                    : ""
-                }
-                ${
-                  exercise.exerciseType === "dropset"
-                    ? `<span class="superset-chip">Dropset</span>`
-                    : ""
-                }
-              </div>
-              <div class="workout-target">${escapeHtml(buildDraftTargetText(exercise))}</div>
-              ${renderLastPerformance(exercise.exerciseName)}
-            </div>
-            <button
-              type="button"
-              class="add-set-btn"
-              data-exercise-index="${exerciseIndex}"
-            >
-              + Add Set
-            </button>
-          </div>
-
-          ${setRows}
-        </div>
-      `;
+  activeWorkoutContainer.innerHTML = groups
+    .map((group) => {
+      if (group.type === "superset") {
+        const innerCards = group.exercises
+          .map((ex) => renderWorkoutExerciseCard(ex.exercise, ex.index))
+          .join("");
+        return `<div class="superset-group-container">
+          <div class="superset-group-header">Superset — Group ${group.groupNumber}</div>
+          ${innerCards}
+        </div>`;
+      }
+      const { exercise, index } = group.exercises[0];
+      return renderWorkoutExerciseCard(exercise, index);
     })
     .join("");
 
   bindWorkoutInputs();
+}
+
+function renderWorkoutExerciseCard(exercise, exerciseIndex) {
+  const setRows = exercise.sets
+    .map((set, setIndex) => renderSetRow(exercise, exerciseIndex, set, setIndex))
+    .join("");
+
+  return `
+    <div class="card workout-exercise-card">
+      <div class="top-row">
+        <div>
+          <h3>${escapeHtml(exercise.exerciseName)}</h3>
+          <div class="inline-chip-row">
+            <span class="type-chip">${escapeHtml(exercise.category)}</span>
+            ${exercise.exerciseType === "dropset" ? `<span class="superset-chip">Dropset</span>` : ""}
+          </div>
+          <div class="workout-target">${escapeHtml(buildDraftTargetText(exercise))}</div>
+          ${renderLastPerformance(exercise.exerciseName)}
+        </div>
+        <button type="button" class="add-set-btn" data-exercise-index="${exerciseIndex}">+ Add Set</button>
+      </div>
+      ${setRows}
+    </div>
+  `;
+}
+
+function groupExercisesForRender(exercises) {
+  const groups = [];
+  const visited = new Set();
+
+  for (let i = 0; i < exercises.length; i++) {
+    if (visited.has(i)) continue;
+    const ex = exercises[i];
+
+    if (ex.exerciseType === "superset" && ex.groupNumber) {
+      const members = [];
+      for (let j = 0; j < exercises.length; j++) {
+        if (exercises[j].exerciseType === "superset" && exercises[j].groupNumber === ex.groupNumber) {
+          members.push({ exercise: exercises[j], index: j });
+          visited.add(j);
+        }
+      }
+      groups.push({ type: "superset", groupNumber: ex.groupNumber, exercises: members });
+    } else {
+      visited.add(i);
+      groups.push({ type: "single", exercises: [{ exercise: ex, index: i }] });
+    }
+  }
+  return groups;
 }
 
 function renderSetRow(exercise, exerciseIndex, set, setIndex) {
@@ -1319,6 +1422,8 @@ async function loadHistory(userId) {
         id,
         exercise_name,
         category,
+        exercise_type,
+        group_number,
         workout_sets (
           id,
           set_number,
@@ -1349,29 +1454,26 @@ async function loadHistory(userId) {
     .map((session) => {
       const routineName = session.routines?.name || "Manual Workout";
 
-      const exerciseHtml = (session.workout_session_exercises || [])
-        .map((exercise) => {
+      const sessionExercises = (session.workout_session_exercises || []);
+      const historyGroups = groupRoutineExercisesForRender(sessionExercises);
+
+      const exerciseHtml = historyGroups.map((group) => {
+        const renderExItem = (exercise) => {
           const sets = [...(exercise.workout_sets || [])]
             .sort((a, b) => a.set_number - b.set_number)
             .map((set) => {
               const line = buildHistorySetText(exercise.category, set);
-              return `
-                <div class="exercise-meta">
-                  Set ${set.set_number}: ${escapeHtml(line)}
-                  ${set.is_pr ? `<span class="pr-chip">PR</span>` : ""}
-                </div>
-              `;
-            })
-            .join("");
+              return `<div class="exercise-meta">Set ${set.set_number}: ${escapeHtml(line)} ${set.is_pr ? `<span class="pr-chip">PR</span>` : ""}</div>`;
+            }).join("");
+          return `<div class="exercise-item"><div class="exercise-name">${escapeHtml(exercise.exercise_name)}</div>${sets}</div>`;
+        };
 
-          return `
-            <div class="exercise-item">
-              <div class="exercise-name">${escapeHtml(exercise.exercise_name)}</div>
-              ${sets}
-            </div>
-          `;
-        })
-        .join("");
+        if (group.type === "superset") {
+          const inner = group.exercises.map(renderExItem).join("");
+          return `<div class="superset-group-container superset-group-compact"><div class="superset-group-header">Superset — Group ${group.groupNumber}</div>${inner}</div>`;
+        }
+        return renderExItem(group.exercises[0]);
+      }).join("");
 
       return `
         <div class="history-card">
@@ -1461,6 +1563,31 @@ function buildDraftTargetText(exercise) {
     return `Target: ${exercise.targetSets} sets • ${exercise.targetDistance || 0} distance • ${Math.round((exercise.targetTimeSeconds || 0) / 60)} min`;
   }
   return `Target: ${exercise.targetSets} sets • ${exercise.targetDistance || 0} distance • ${exercise.targetWeight || 0} weight`;
+}
+
+function groupRoutineExercisesForRender(exercises) {
+  const groups = [];
+  const visited = new Set();
+
+  for (let i = 0; i < exercises.length; i++) {
+    if (visited.has(i)) continue;
+    const ex = exercises[i];
+
+    if (ex.exercise_type === "superset" && ex.group_number) {
+      const members = [];
+      for (let j = 0; j < exercises.length; j++) {
+        if (exercises[j].exercise_type === "superset" && exercises[j].group_number === ex.group_number) {
+          members.push(exercises[j]);
+          visited.add(j);
+        }
+      }
+      groups.push({ type: "superset", groupNumber: ex.group_number, exercises: members });
+    } else {
+      visited.add(i);
+      groups.push({ type: "single", exercises: [ex] });
+    }
+  }
+  return groups;
 }
 
 function buildExerciseTypeText(exercise) {
