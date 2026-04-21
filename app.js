@@ -211,6 +211,10 @@ async function signOut() {
 }
 
 async function loadApp() {
+  // Hide both sections while checking auth to prevent login screen flash
+  authSection.classList.add("hidden");
+  appSection.classList.add("hidden");
+
   const {
     data: { user },
     error,
@@ -962,7 +966,7 @@ async function handleLoadWorkout() {
       exerciseType: exercise.exercise_type || "normal",
       groupNumber: exercise.group_number || null,
       sortOrder: exercise.sort_order || 0,
-      sets: buildInitialSetsForExercise(exercise),
+      sets: buildInitialSetsForExercise(exercise, lastPerformanceMap[exercise.exercise_name]),
     })),
   };
 
@@ -971,17 +975,19 @@ async function handleLoadWorkout() {
   showView("active-workout");
 }
 
-function buildInitialSetsForExercise(exercise) {
+function buildInitialSetsForExercise(exercise, lastPerf) {
   const count = Number(exercise.target_sets || 0);
   const items = [];
+  const prevSets = lastPerf?.sets || [];
 
   for (let i = 1; i <= count; i += 1) {
+    const prev = prevSets.find((s) => s.set_number === i);
     items.push({
       setNumber: i,
-      reps: "",
-      weight: "",
-      distance: "",
-      timeSeconds: "",
+      reps: prev?.reps != null ? String(prev.reps) : "",
+      weight: prev?.weight != null ? String(prev.weight) : "",
+      distance: prev?.distance != null ? String(prev.distance) : "",
+      timeSeconds: prev?.time_seconds != null ? String(prev.time_seconds) : "",
     });
   }
 
@@ -1085,24 +1091,8 @@ function renderSetRow(exercise, exerciseIndex, set, setIndex) {
     return `
       ${commonStart}
       <div class="exercise-grid">
-        <input
-          type="number"
-          placeholder="Weight"
-          value="${escapeAttribute(set.weight)}"
-          class="set-input"
-          data-exercise-index="${exerciseIndex}"
-          data-set-index="${setIndex}"
-          data-field="weight"
-        />
-        <input
-          type="number"
-          placeholder="Reps"
-          value="${escapeAttribute(set.reps)}"
-          class="set-input"
-          data-exercise-index="${exerciseIndex}"
-          data-set-index="${setIndex}"
-          data-field="reps"
-        />
+        ${buildStepperField("Weight", set.weight, exerciseIndex, setIndex, "weight", 2.5)}
+        ${buildStepperField("Reps", set.reps, exerciseIndex, setIndex, "reps", 1)}
       </div>
     </div>`;
   }
@@ -1111,24 +1101,8 @@ function renderSetRow(exercise, exerciseIndex, set, setIndex) {
     return `
       ${commonStart}
       <div class="exercise-grid">
-        <input
-          type="number"
-          placeholder="Distance"
-          value="${escapeAttribute(set.distance)}"
-          class="set-input"
-          data-exercise-index="${exerciseIndex}"
-          data-set-index="${setIndex}"
-          data-field="distance"
-        />
-        <input
-          type="number"
-          placeholder="Time (seconds)"
-          value="${escapeAttribute(set.timeSeconds)}"
-          class="set-input"
-          data-exercise-index="${exerciseIndex}"
-          data-set-index="${setIndex}"
-          data-field="timeSeconds"
-        />
+        ${buildStepperField("Distance", set.distance, exerciseIndex, setIndex, "distance", 0.5)}
+        ${buildStepperField("Time (sec)", set.timeSeconds, exerciseIndex, setIndex, "timeSeconds", 30)}
       </div>
     </div>`;
   }
@@ -1136,26 +1110,42 @@ function renderSetRow(exercise, exerciseIndex, set, setIndex) {
   return `
     ${commonStart}
     <div class="exercise-grid">
-      <input
-        type="number"
-        placeholder="Weight"
-        value="${escapeAttribute(set.weight)}"
-        class="set-input"
-        data-exercise-index="${exerciseIndex}"
-        data-set-index="${setIndex}"
-        data-field="weight"
-      />
-      <input
-        type="number"
-        placeholder="Distance"
-        value="${escapeAttribute(set.distance)}"
-        class="set-input"
-        data-exercise-index="${exerciseIndex}"
-        data-set-index="${setIndex}"
-        data-field="distance"
-      />
+      ${buildStepperField("Weight", set.weight, exerciseIndex, setIndex, "weight", 2.5)}
+      ${buildStepperField("Distance", set.distance, exerciseIndex, setIndex, "distance", 0.5)}
     </div>
   </div>`;
+}
+
+function buildStepperField(placeholder, value, exerciseIndex, setIndex, field, step) {
+  return `
+    <div class="stepper-group">
+      <button type="button" class="stepper-btn stepper-dec" data-exercise-index="${exerciseIndex}" data-set-index="${setIndex}" data-field="${field}" data-step="${step}">−</button>
+      <input
+        type="number"
+        placeholder="${placeholder}"
+        value="${escapeAttribute(value)}"
+        class="set-input stepper-input"
+        data-exercise-index="${exerciseIndex}"
+        data-set-index="${setIndex}"
+        data-field="${field}"
+      />
+      <button type="button" class="stepper-btn stepper-inc" data-exercise-index="${exerciseIndex}" data-set-index="${setIndex}" data-field="${field}" data-step="${step}">+</button>
+    </div>
+  `;
+}
+
+function handleStepper(btn, direction) {
+  const ei = Number(btn.dataset.exerciseIndex);
+  const si = Number(btn.dataset.setIndex);
+  const field = btn.dataset.field;
+  const step = Number(btn.dataset.step);
+  const current = Number(activeDraft.exercises[ei].sets[si][field]) || 0;
+  const newVal = Math.max(0, current + step * direction);
+  const rounded = Math.round(newVal * 100) / 100;
+  activeDraft.exercises[ei].sets[si][field] = String(rounded);
+  saveDraftToLocal();
+  const input = btn.closest(".stepper-group").querySelector(".set-input");
+  input.value = String(rounded);
 }
 
 function bindWorkoutInputs() {
@@ -1167,6 +1157,14 @@ function bindWorkoutInputs() {
       activeDraft.exercises[exerciseIndex].sets[setIndex][field] = event.target.value;
       saveDraftToLocal();
     });
+  });
+
+  Array.from(document.querySelectorAll(".stepper-dec")).forEach((btn) => {
+    btn.addEventListener("click", () => handleStepper(btn, -1));
+  });
+
+  Array.from(document.querySelectorAll(".stepper-inc")).forEach((btn) => {
+    btn.addEventListener("click", () => handleStepper(btn, 1));
   });
 
   Array.from(document.querySelectorAll(".add-set-btn")).forEach((btn) => {
@@ -1219,6 +1217,10 @@ async function finishWorkout() {
     return;
   }
 
+  finishWorkoutBtn.disabled = true;
+  finishWorkoutBtn.textContent = "Saving...";
+  discardDraftBtn.disabled = true;
+
   const validExercisePayloads = [];
 
   for (const exercise of activeDraft.exercises) {
@@ -1251,6 +1253,9 @@ async function finishWorkout() {
 
   if (sessionError) {
     workoutSaveMessage.textContent = sessionError.message;
+    finishWorkoutBtn.disabled = false;
+    finishWorkoutBtn.textContent = "Finish Workout";
+    discardDraftBtn.disabled = false;
     return;
   }
 
@@ -1279,6 +1284,9 @@ async function finishWorkout() {
 
     if (sessionExerciseError) {
       workoutSaveMessage.textContent = sessionExerciseError.message;
+      finishWorkoutBtn.disabled = false;
+      finishWorkoutBtn.textContent = "Finish Workout";
+      discardDraftBtn.disabled = false;
       return;
     }
 
@@ -1301,6 +1309,9 @@ async function finishWorkout() {
 
       if (setError) {
         workoutSaveMessage.textContent = setError.message;
+        finishWorkoutBtn.disabled = false;
+        finishWorkoutBtn.textContent = "Finish Workout";
+        discardDraftBtn.disabled = false;
         return;
       }
 
@@ -1314,6 +1325,9 @@ async function finishWorkout() {
   activeDraft = null;
   activeWorkoutContainer.innerHTML = "";
   workoutNotes.value = "";
+  finishWorkoutBtn.disabled = false;
+  finishWorkoutBtn.textContent = "Finish Workout";
+  discardDraftBtn.disabled = false;
   workoutSaveMessage.textContent = `Workout saved successfully.${totalPRsThisWorkout ? ` ${totalPRsThisWorkout} PR(s)!` : ""}`;
 
   await refreshAppData();
@@ -1519,6 +1533,9 @@ async function tryRestoreDraft() {
     if (!parsed || parsed.userId !== currentUser.id) return;
 
     activeDraft = parsed;
+    if (activeDraft.routineId) {
+      await loadLastPerformance(activeDraft.routineId);
+    }
     renderActiveWorkout();
   } catch {
     clearLocalDraft();
